@@ -1,0 +1,13 @@
+This is firmware pack/unpack utility for jboot-based routers.
+You also need squashfs and unsquashfs (you can get it from firmware-mod-kit) of corresponding versions.
+
+OpenSource replacement for binboy from SDK found in:
+D-Link DWR-921
+Lava Telecom LR-25G001
+
+
+Now only sanity check (with all CRC calculations) and header display finished.
+./openbinboy [-c] -i input.bin
+
+  -c      Use old style jboot CRC for some calculations (DWA-921 and others), if you see CRC mismatches, try this
+  -i      Print headers and do sanity check on whole firmware or single container
