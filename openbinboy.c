@@ -394,7 +394,10 @@ int unit_sanity_check(unsigned char *src_mem, size_t input_size) {
     if (retcode > 0) goto exit;
 
     uint16_t calc_payload_crc16 = jboot_crc16(src_mem + sizeof(unit_header), unit_header.payload_size, 0);
-    if (opt_oldcrc) calc_payload_crc16 -= 0x00FF; // old jboot crc
+
+    if (opt_oldcrc &&
+	(unit_header.type == MAGIC_KERNEL || unit_header.type == MAGIC_BOOTLOADER)
+    ) calc_payload_crc16 -= 0x00FF; // old jboot crc
 
     printf("Payload calculated checksum ");
     if (calc_payload_crc16 == unit_header.payload_crc16) {
