@@ -10,7 +10,8 @@ Lava Telecom LR-25G001
 
 
 Now only sanity check (with all CRC calculations) and header display finished.
-./openbinboy [-c] -i input.bin
+./openbinboy [-c] < -i input.bin | -x input.bin >
 
   -c      Use old style jboot CRC for some calculations (DWR-921 and others), if you see CRC mismatches, try this option
   -i      Print headers and do sanity check on whole firmware or single container
+  -x      Extract files from whole firmware to bootloader.bin + kernel.bin + rootfs.bin + branding.bin

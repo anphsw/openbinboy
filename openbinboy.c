@@ -22,6 +22,7 @@
 
 /* global swicthes for options */
 int opt_info=0, opt_extract=0, opt_assemble=0, opt_oldcrc=0;
+size_t next_unit_pos=0; // source file position for recursive checking of headers
 
 typedef struct unit_header {
 	/* firmware part, not flashed */
@@ -37,7 +38,7 @@ typedef struct unit_header {
 	uint32_t payload_size;		// squashfs size / kernel header + kernel size
 	char padding3[16];
 	uint32_t magic;			// always 0x00024842
-	uint32_t type;			// maybe bit mask? (0x00010000 - bootloader, 0x04040000 - kernel, 0x00080000 - rootfs, 0x00050000 - branding)
+	uint32_t type;			// maybe bit mask? (0x00010000 - bootloader, 0x04040000 - kernel, 0x00080000 - rootfs, 0x00050000 / 0x04050000 - branding)
 	char padding4[4];
 	uint16_t devid_bin;		// device id? (38 6E for LVA6E3804001 and TLW6E3804001 / 24 6E for DLK6E2414001)
 	uint16_t header_crc16;		// inverted jboot checksum of whole header with checksum field zeroed
@@ -48,6 +49,7 @@ typedef struct unit_header {
 #define MAGIC_KERNEL		0x04040000
 #define MAGIC_ROOTFS		0x00080000
 #define MAGIC_BRANDING		0x00050000
+#define MAGIC_BRANDING2		0x04050000
 
 typedef struct kernel_header {
 	/* kernel image part, flashed */
@@ -216,6 +218,7 @@ void hexDump (char *desc, void *addr, int len) {
 
 
 void unit_header_print(unit_header_t unit_header) {
+    printf("\n");
     printf("Header information (original order is little endian):\n");
     printf("-- Device information:\n");
     printf("0x%04x, device ID (text)              : %s\n",   		OFFSET_PRINT_STRING(unit_header, devid));
@@ -238,6 +241,7 @@ void unit_header_print(unit_header_t unit_header) {
 };
 
 void kernel_header_print(kernel_header_t kernel_header) {
+    printf("\n");
     printf("0x%04x, magic                         : 0x%08x\n",		OFFSET_PRINT(kernel_header, magic));
     printf("0x%04x, timestamp (raw)               : 0x%08x\n",		OFFSET_PRINT(kernel_header, timestamp));
     printf("        timestamp (decoded, unixtime) : %u\n", (kernel_header.timestamp * 4) + 0x35016f00);
@@ -255,6 +259,21 @@ void kernel_header_print(kernel_header_t kernel_header) {
     printf("0x%04x, hdr_crc32                     : 0x%08x\n",		OFFSET_PRINT(kernel_header, hdr_crc32));
     printf("0x%04x, magic3                        : 0x%08x\n",		OFFSET_PRINT(kernel_header, magic3));
 };
+
+int data_extract(unsigned char* extract_ptr, size_t extract_size, char name[]) {
+	printf("--\n");
+	printf("Extracting unit %s payload at position %u, size %u ...\n\n", name, next_unit_pos, extract_size);
+
+	FILE* fd_extract = fopen(name,"wb");
+	if (fd_extract == 0) {
+	    perror("Cannot open unit file for write");
+	    return 100;
+	}
+	fseek(fd_extract, 0, SEEK_SET);
+	fwrite(extract_ptr, extract_size, 1, fd_extract);
+	fclose(fd_extract);
+	return 0;
+}
 
 int kernel_sanity_check(unsigned char *src_mem, size_t input_size) {
     int retcode = 0;
@@ -350,9 +369,9 @@ int kernel_sanity_check(unsigned char *src_mem, size_t input_size) {
     return retcode;
 }
 
-
 int unit_sanity_check(unsigned char *src_mem, size_t input_size) {
     int retcode = 0;
+    char unit_filename[32];
 
     unit_header_t unit_header;
     memcpy(&unit_header, src_mem, sizeof(unit_header)); // fill unit header from input
@@ -360,7 +379,6 @@ int unit_sanity_check(unsigned char *src_mem, size_t input_size) {
     // print header information
     unit_header_print(unit_header);
 
-    size_t next_unit_pointer = 0;
     size_t calc_data_size = sizeof(unit_header) + unit_header.payload_size;
 
     printf("-- Container checks:\n");
@@ -369,10 +387,10 @@ int unit_sanity_check(unsigned char *src_mem, size_t input_size) {
 	printf("OK        : %zu bytes\n", calc_data_size);
     } else {
 	printf("MISMATCH  : ***** calculated %zu bytes, filesize %zu bytes\n", calc_data_size, input_size);
-	retcode++;
+	retcode+=100;
     }
 
-    // data size mismatch is fatal error!    
+    // data size mismatch is fatal error!
     if (retcode > 0) goto exit;
 
     uint16_t calc_payload_crc16 = jboot_crc16(src_mem + sizeof(unit_header), unit_header.payload_size, 0);
@@ -401,36 +419,67 @@ int unit_sanity_check(unsigned char *src_mem, size_t input_size) {
 	retcode++;
     }
 
-    if (retcode == 0 && opt_extract) {
-	printf("--\n");
-	printf("Extracting unit payload...\n");
-
-//    FILE* fd_extract = fopen(kernel_file,"wb");
-	FILE* fd_extract = fopen("unit.bin","wb");
-	if (fd_extract == 0) {
-	    perror("Cannot open unit file for write");
-	    retcode+=10;
-	    goto exit;
-	}
-	fseek(fd_extract, 0, SEEK_SET);
-	fwrite(src_mem + sizeof(unit_header), unit_header.payload_size, 1, fd_extract);
-	fclose(fd_extract);
-    }
-
     // detect container type
     switch (unit_header.type) {
 	case MAGIC_KERNEL:
 	    printf("---\n");
-	    printf("Kernel header detected (or start of firmware), parsing it...\n");
+	    printf("Kernel header was detected (or start of firmware), parsing it...\n");
 
-	    kernel_sanity_check(src_mem + sizeof(unit_header), input_size - sizeof(unit_header));
+	    retcode += kernel_sanity_check(src_mem + sizeof(unit_header), input_size - sizeof(unit_header));
+
+	    sprintf(unit_filename, "kernel.bin");
+
 	    break;
+	;;
+	case MAGIC_BOOTLOADER:
+	    printf("---\n");
+	    printf("Bootloader unit was detected...\n");
+
+	    sprintf(unit_filename, "bootloader.bin");
+
+	    break;
+	;;
+	case MAGIC_ROOTFS:
+	    printf("---\n");
+	    printf("RootFS unit was detected...\n");
+
+	    sprintf(unit_filename, "rootfs.bin");
+
+	    break;
+	;;
+	case MAGIC_BRANDING:
+	case MAGIC_BRANDING2:
+	    printf("---\n");
+	    printf("Branding unit was detected...\n");
+
+	    sprintf(unit_filename, "branding.bin");
+
+	    break;
+	;;
 	default:
+	    printf("---\n");
+	    printf("Unknown unit ID %08x was detected!! Exiting!!\n", unit_header.type);
+
+	    retcode++;
+
+	    sprintf(unit_filename, "%08x.bin", unit_header.type);
+
+	    break;
 	;;
     }
+
+    if (opt_extract) {
+	retcode += data_extract(src_mem + sizeof(unit_header), unit_header.payload_size, unit_filename);
+    }
+
+
+    // set offset for next run
+    next_unit_pos += sizeof(unit_header) + unit_header.payload_size;
+
     exit:
     return retcode;
 }
+
 
 int main(int argc, char *argv[]) {
     char *input_name=NULL;
@@ -443,7 +492,7 @@ int main(int argc, char *argv[]) {
 
     int c;
     while ( 1 ) {
-        c = getopt(argc, argv, "ci:");
+        c = getopt(argc, argv, "ci:x:");
         if (c == -1)
                 break;
 
@@ -454,6 +503,10 @@ int main(int argc, char *argv[]) {
                 case 'i':  // print info
 			input_name = optarg;
                         opt_info++;
+			break;
+                case 'x':  // print info
+			input_name = optarg;
+                        opt_extract++;
 			break;
                 default:
                         break;
@@ -466,7 +519,7 @@ int main(int argc, char *argv[]) {
 	FILE* source_file = fopen(input_name,"r");
 	if (source_file == 0) {
     	    perror("Cannot open file for read");
-    	    return 10;
+    	    return 100;
 	}
     
 	fseek(source_file, 0, SEEK_END);
@@ -479,7 +532,9 @@ int main(int argc, char *argv[]) {
 	fread(src_mem, input_size, 1, source_file);
 	fclose(source_file);
 
-	retcode += unit_sanity_check(src_mem, input_size);
+	while (retcode <= 100 && next_unit_pos < input_size) {
+	    retcode += unit_sanity_check(src_mem + next_unit_pos, input_size - next_unit_pos);
+	}
 
 	free(src_mem);
     }
@@ -490,6 +545,7 @@ int main(int argc, char *argv[]) {
 	argv[0]);
 	fprintf(stderr, "  -c      Use old style jboot CRC for some calculations (DWA-921 and others)\n");
 	fprintf(stderr, "  -i      Print headers and do sanity check on whole firmware or single container\n");
+	fprintf(stderr, "  -x      Extract payloads from whole firmware to bootloader.bin+kernel.bin+rootfs.bin+branding.bin\n");
 	retcode++;
     }
 
