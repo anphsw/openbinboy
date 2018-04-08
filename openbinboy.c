@@ -70,6 +70,15 @@ typedef struct kernel_header {
 	uint32_t magic3;		// 28 00 00 00
 } kernel_header_t;
 
+typedef struct branding_header {
+	/* branding image part, not exist on TLW6E3804001 and new versions of LVA6E3804001, always on dlink and zyxel */
+	uint32_t magic;			// FF 05 24 2B
+	uint32_t timestamp;		// (unixtime - 0x35016f00) / 4 (little endian on ZXL6E2425001, big endian on others)
+	uint32_t payload_size;		// branding payload size       (little endian on ZXL6E2425001, big endian on others)
+	uint16_t payload_crc16;		// jboot_crc16 of payload
+	uint16_t hdr_crc16;		// ~jboot_crc16 from magic to hdr_crc16 with "FF 05 24 2B" replaced to "05 05 24 2B"
+} branding_header_t;
+
 /* crc32 from openssh */
 static const uint32_t crc32tab[] = {
         0x00000000L, 0x77073096L, 0xee0e612cL, 0x990951baL,
@@ -260,6 +269,16 @@ void kernel_header_print(kernel_header_t kernel_header) {
     printf("0x%04x, magic3                        : 0x%08x\n",		OFFSET_PRINT(kernel_header, magic3));
 };
 
+void branding_header_print(branding_header_t branding_header) {
+    printf("\n");
+    printf("0x%04x, magic                         : 0x%08x\n",		OFFSET_PRINT(branding_header, magic));
+    printf("0x%04x, timestamp (raw)               : 0x%08x\n",		OFFSET_PRINT(branding_header, timestamp));
+    printf("        timestamp (decoded, unixtime) : %u\n", (branding_header.timestamp * 4) + 0x35016f00);
+    printf("0x%04x, payload size                  : 0x%08x, %u\n",	OFFSET_PRINT(branding_header, payload_size), branding_header.payload_size);
+    printf("0x%04x, payload_crc16                 : 0x%04x\n",		OFFSET_PRINT(branding_header, payload_crc16));
+    printf("0x%04x, header_crc16                  : 0x%04x\n",		OFFSET_PRINT(branding_header, hdr_crc16));
+};
+
 int data_extract(unsigned char* extract_ptr, size_t extract_size, char name[]) {
 	printf("--\n");
 	printf("Extracting unit %s payload at position %u, size %u ...\n\n", name, next_unit_pos, extract_size);
@@ -369,6 +388,58 @@ int kernel_sanity_check(unsigned char *src_mem, size_t input_size) {
     return retcode;
 }
 
+int branding_sanity_check(unsigned char *src_mem, size_t input_size) {
+    int retcode = 0;
+
+    branding_header_t branding_header;
+    memcpy(&branding_header, src_mem, sizeof(branding_header)); // fill unit header from input
+
+    // print header information
+    branding_header_print(branding_header);
+
+    size_t calc_data_size = sizeof(branding_header) + branding_header.payload_size;
+
+    printf("-- Container checks:\n");
+    printf("Maximum data size of unit   ");
+    if (calc_data_size <= input_size) {
+	printf("OK        : %zu bytes\n", calc_data_size);
+    } else {
+	printf("MISMATCH  : ***** calculated %zu bytes, filesize %zu bytes\n", calc_data_size, input_size);
+	retcode+=100;
+    }
+
+    // data size mismatch is fatal error!
+    if (retcode > 0) goto exit;
+
+    uint16_t calc_payload_crc16 = jboot_crc16(src_mem + sizeof(branding_header), branding_header.payload_size, 0);
+
+    // make copy of header for wierd crc16 calculations
+    int crc16_area2_size	= sizeof(branding_header) - sizeof(branding_header.hdr_crc16);
+    memset(&branding_header, 0x05, 1); // replace 0xFF in firmware header to 0x05 found in actual flash dump
+
+    uint16_t calc_hdr_crc16 = ~jboot_crc16(&branding_header, crc16_area2_size, 0);
+    // crc16 of header finished
+
+    printf("Payload calculated crc16   ");
+    if (calc_payload_crc16 == branding_header.payload_crc16) {
+	printf("OK         : 0x%04x\n", calc_payload_crc16);
+    } else {
+	printf("MISMATCH   : ***** calc 0x%04x, header 0x%04x\n", calc_payload_crc16, branding_header.payload_crc16);
+	retcode++;
+    }
+
+    printf("Header  calculated crc16   ");
+    if (calc_hdr_crc16 == branding_header.hdr_crc16) {
+	printf("OK         : 0x%04x\n", calc_hdr_crc16);
+    } else {
+	printf("MISMATCH   : ***** calc 0x%04x, header 0x%04x\n", calc_hdr_crc16, branding_header.hdr_crc16);
+	retcode++;
+    }
+
+    exit:
+    return retcode;
+}
+
 int unit_sanity_check(unsigned char *src_mem, size_t input_size) {
     int retcode = 0;
     char unit_filename[32];
@@ -454,6 +525,8 @@ int unit_sanity_check(unsigned char *src_mem, size_t input_size) {
 	case MAGIC_BRANDING2:
 	    printf("---\n");
 	    printf("Branding unit was detected...\n");
+
+	    retcode += branding_sanity_check(src_mem + sizeof(unit_header), input_size - sizeof(unit_header));
 
 	    sprintf(unit_filename, "branding.bin");
 
