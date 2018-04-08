@@ -303,9 +303,22 @@ int kernel_sanity_check(unsigned char *src_mem, size_t input_size) {
     // print header information
     kernel_header_print(kernel_header);
 
+    size_t calc_data_size = sizeof(kernel_header) + kernel_header.kern_size;
+
+    printf("-- Container checks:\n");
+    printf("Maximum data size of unit   ");
+    if (calc_data_size <= input_size) {
+	printf("OK        : %zu bytes\n", calc_data_size);
+    } else {
+	printf("MISMATCH  : ***** calculated %zu bytes, filesize %zu bytes\n", calc_data_size, input_size);
+	retcode+=100;
+    }
+
+    // data size mismatch is fatal error!
+    if (retcode > 0) goto exit;
+
     uint32_t calc_kernel_crc = apple_crc32(src_mem + sizeof(kernel_header), kernel_header.kern_size, 0);
     uint32_t calc_rootfs_crc = apple_crc32(src_mem + sizeof(kernel_header) + kernel_header.kern_size + sizeof(unit_header_t), kernel_header.rootfs_size, 0);
-
 
     // make copy of header for wierd crc16 calculations
     void *crc16_area2_start	= &kernel_header.magic;
@@ -385,6 +398,7 @@ int kernel_sanity_check(unsigned char *src_mem, size_t input_size) {
 	retcode++;
     }
 
+    exit:
     return retcode;
 }
 
