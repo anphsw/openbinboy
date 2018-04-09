@@ -273,10 +273,16 @@ void kernel_header_print(kernel_header_t kernel_header) {
 
 void branding_header_print(branding_header_t branding_header) {
     printf("\n");
+    if (opt_bigendian) printf("** Big endian option specified!!\n");
     printf("0x%04x, magic                         : 0x%08x\n",		OFFSET_PRINT(branding_header, magic));
     printf("0x%04x, timestamp (raw)               : 0x%08x\n",		OFFSET_PRINT(branding_header, timestamp));
+ if (opt_bigendian) {
+    printf("        timestamp (decoded, unixtime) : %u\n", (htonl(branding_header.timestamp) * 4) + 0x35016f00);
+    printf("0x%04x, payload size                  : 0x%08x, %u\n",	OFFSET_PRINT(branding_header, payload_size), htonl(branding_header.payload_size));
+ } else {
     printf("        timestamp (decoded, unixtime) : %u\n", (branding_header.timestamp * 4) + 0x35016f00);
     printf("0x%04x, payload size                  : 0x%08x, %u\n",	OFFSET_PRINT(branding_header, payload_size), branding_header.payload_size);
+ }
     printf("0x%04x, payload_crc16                 : 0x%04x\n",		OFFSET_PRINT(branding_header, payload_crc16));
     printf("0x%04x, header_crc16                  : 0x%04x\n",		OFFSET_PRINT(branding_header, hdr_crc16));
 };
@@ -413,7 +419,8 @@ int branding_sanity_check(unsigned char *src_mem, size_t input_size) {
     // print header information
     branding_header_print(branding_header);
 
-    size_t calc_data_size = sizeof(branding_header) + branding_header.payload_size;
+    size_t payload_size = opt_bigendian ? htonl(branding_header.payload_size) : branding_header.payload_size;
+    size_t calc_data_size = sizeof(branding_header) + payload_size;
 
     printf("-- Container checks:\n");
     printf("Maximum data size of unit   ");
@@ -427,7 +434,7 @@ int branding_sanity_check(unsigned char *src_mem, size_t input_size) {
     // data size mismatch is fatal error!
     if (retcode > 0) goto exit;
 
-    uint16_t calc_payload_crc16 = jboot_crc16(src_mem + sizeof(branding_header), branding_header.payload_size, 0);
+    uint16_t calc_payload_crc16 = jboot_crc16(src_mem + sizeof(branding_header), payload_size, 0);
 
     // make copy of header for wierd crc16 calculations
     int crc16_area2_size	= sizeof(branding_header) - sizeof(branding_header.hdr_crc16);
