@@ -22,6 +22,8 @@
 
 /* global swicthes for options */
 int opt_info=0, opt_extract=0, opt_assemble=0, opt_oldcrc=0;
+int opt_bigendian=0;
+
 size_t next_unit_pos=0; // source file position for recursive checking of headers
 
 typedef struct unit_header {
@@ -570,19 +572,51 @@ int unit_sanity_check(unsigned char *src_mem, size_t input_size) {
     return retcode;
 }
 
+void branding_header_make(unsigned char *src_mem, size_t input_size, uint32_t unixtime) {
+
+    branding_header_t branding_header;
+    memset(&branding_header, 0, sizeof(branding_header));
+
+    if (!unixtime) unixtime = time(NULL);
+
+    branding_header.timestamp = (unixtime - 0x35016f00) / 4;
+
+    branding_header.magic = 0x2b2405ff;
+    branding_header.payload_size = input_size - sizeof(branding_header);
+
+    // payload CRC
+    branding_header.payload_crc16 = jboot_crc16(src_mem + sizeof(branding_header), branding_header.payload_size, 0);
+
+    // wierd crc16 calculations
+    int crc16_area2_size	= sizeof(branding_header) - sizeof(branding_header.hdr_crc16);
+    memset(&branding_header, 0x05, 1); // replace 0xFF in firmware header to 0x05 found in actual flash dump
+
+    branding_header.hdr_crc16 = ~jboot_crc16(&branding_header, crc16_area2_size, 0);
+
+    memset(&branding_header, 0xFF, 1); // revert after calculation
+    // crc16 of header finished
+
+    // write branding header
+    memcpy(src_mem, &branding_header, sizeof(branding_header));
+}
+
+
 
 int main(int argc, char *argv[]) {
     char *input_name=NULL;
-    char *input_kernel_name=NULL, *input_rootfs_name=NULL, *output_name=NULL;
+    char *input_kernel_name=NULL, *input_rootfs_name=NULL, *input_branding_name=NULL;
+    char *output_name=NULL;
     char *profile_name=NULL;
-    int retcode=0;
-    uint32_t upgradekey1=0, upgradekey2=0;
 
-    int opt_upgradekey1=0, opt_upgradekey2=0;
+    uint32_t unixtime=0;
+
+    int retcode=0;
+
+    int opt_make_branding=0;
 
     int c;
     while ( 1 ) {
-        c = getopt(argc, argv, "ci:x:");
+        c = getopt(argc, argv, "cei:x:t:hb:o:");
         if (c == -1)
                 break;
 
@@ -590,13 +624,28 @@ int main(int argc, char *argv[]) {
                 case 'c':  // old style CRC
                         opt_oldcrc++;
                         break;
+                case 'e':  // big endian headers
+                        opt_bigendian++;
+                        break;
                 case 'i':  // print info
 			input_name = optarg;
                         opt_info++;
 			break;
-                case 'x':  // print info
+                case 'x':  // print info and extract payloads
 			input_name = optarg;
                         opt_extract++;
+			break;
+                case 't':  // unixtime
+			if (!sscanf(optarg, "%u", &unixtime)) goto print_usage;
+			break;
+                case 'h':  // make branding header
+                        opt_make_branding++;
+			break;
+                case 'b':  // specify branding name
+			input_branding_name = optarg;
+			break;
+                case 'o':  // output file
+			output_name = optarg;
 			break;
                 default:
                         break;
@@ -628,14 +677,43 @@ int main(int argc, char *argv[]) {
 
 	free(src_mem);
     }
+    else if (opt_make_branding && input_branding_name && output_name) {
+
+	FILE* source_file = fopen(input_branding_name,"r");
+	if (source_file == 0) {
+	    perror("Cannot open file for read");
+	    return 100;
+	}
+
+	fseek(source_file, 0, SEEK_END);
+	size_t input_size = ftell(source_file);
+	size_t result_size = input_size + sizeof(branding_header_t);
+
+	unsigned char *result_mem = malloc(result_size);
+	memset(result_mem, 0, result_size);
+
+	fseek(source_file, 0, SEEK_SET);
+	fread(result_mem + sizeof(branding_header_t), input_size, 1, source_file);
+	fclose(source_file);
+
+	branding_header_make(result_mem, result_size, unixtime);
+	retcode += branding_sanity_check(result_mem, result_size);
+
+	if (retcode == 0) {
+	    retcode += data_extract(result_mem, result_size, output_name);
+	}
+    }
     else {
 	print_usage:
 	fprintf(stderr, "Usage:\n"
 	"%s { [-c] -x input.bin | [-c] -i input.bin | [-c] [-p profile] -n -k kernel.bin -r rootfs.bin [-b branding.bin] [-u bootloader.bin] -o output.bin  }\n",
 	argv[0]);
 	fprintf(stderr, "  -c      Use old style jboot CRC for some calculations (DWA-921 and others)\n");
+	fprintf(stderr, "  -e      Use big endian for all calculations\n");
 	fprintf(stderr, "  -i      Print headers and do sanity check on whole firmware or single container\n");
 	fprintf(stderr, "  -x      Extract payloads from whole firmware to bootloader.bin+kernel.bin+rootfs.bin+branding.bin\n");
+	fprintf(stderr, "  -t      Use specified unixtime for inclusion to image header\n");
+	fprintf(stderr, "  -h      Add branding header to input file { [-c] [-e] [-t unixtime ] -i input.bin -o output.bin }\n");
 	retcode++;
     }
 
