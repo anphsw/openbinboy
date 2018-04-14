@@ -9,9 +9,12 @@ Zyxel LTE 3311
 Lava Telecom LR-25G001
 
 
-Now only sanity check (with all CRC calculations) and header display finished.
-./openbinboy [-c] < -i input.bin | -x input.bin >
+Now only sanity check (with all CRC calculations), header display, making branding header finished.
+./openbinboy [-c] [-e] < -i input.bin | -x input.bin >
 
   -c      Use old style jboot CRC for some calculations (DWR-921 and others), if you see CRC mismatches, try this option
+  -e      Use big endian for all calculations
   -i      Print headers and do sanity check on whole firmware or single container
   -x      Extract files from whole firmware to bootloader.bin + kernel.bin + rootfs.bin + branding.bin
+  -t      Use specified unixtime for inclusion to image header
+  -h      Add branding header to input file { [-c] [-e] [-t unixtime ] -i input.bin -o output.bin }
