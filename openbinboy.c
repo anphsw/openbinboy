@@ -416,6 +416,12 @@ int branding_sanity_check(unsigned char *src_mem, size_t input_size) {
     branding_header_t branding_header;
     memcpy(&branding_header, src_mem, sizeof(branding_header)); // fill unit header from input
 
+    if (branding_header.magic != 0x242b05ff &&
+	branding_header.magic != 0x242b0505) {
+	    printf("** Branding unit contains no magic, assuming raw data...\n");
+	    goto exit;
+    }
+
     // print header information
     branding_header_print(branding_header);
 
