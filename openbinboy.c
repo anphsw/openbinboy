@@ -590,8 +590,6 @@ void branding_header_make(unsigned char *src_mem, size_t input_size, uint32_t un
     branding_header_t branding_header;
     memset(&branding_header, 0, sizeof(branding_header));
 
-    if (!unixtime) unixtime = time(NULL);
-
     branding_header.timestamp = (unixtime - 0x35016f00) / 4;
 
     branding_header.magic = 0x2b2405ff;
@@ -613,11 +611,128 @@ void branding_header_make(unsigned char *src_mem, size_t input_size, uint32_t un
     memcpy(src_mem, &branding_header, sizeof(branding_header));
 }
 
+void kernel_header_make(unsigned char *src_mem, size_t kernel_size, size_t rootfs_size, uint32_t unixtime) {
 
+    kernel_header_t kernel_header;
+    memset(&kernel_header, 0, sizeof(kernel_header));
+
+    kernel_header.timestamp = (unixtime - 0x35016f00) / 4;
+
+    kernel_header.magic  = 0x2b2404ff;
+    kernel_header.magic2 = 0x02032124;
+    kernel_header.magic3 = 0x00000028;
+
+    // first try: static entries
+    kernel_header.kern_load_addr	= 0x80000000;
+    kernel_header.kern_entry		= 0x80000000;
+    kernel_header.rootfs_load_addr	= 0xbc180000;
+
+    kernel_header.kern_size = kernel_size;
+    kernel_header.rootfs_size = rootfs_size;
+
+    // payload CRC
+    kernel_header.kern_crc32 = apple_crc32(src_mem + sizeof(kernel_header), kernel_header.kern_size, 0);
+    kernel_header.rootfs_crc32 = apple_crc32(src_mem + sizeof(kernel_header) + kernel_header.kern_size + sizeof(unit_header_t), kernel_header.rootfs_size, 0);
+
+    // header crc32 calculations
+    size_t crc32_area2_size	= (size_t)&kernel_header.magic3 - (size_t)&kernel_header.magic2 + sizeof(kernel_header.hdr_crc32);
+    kernel_header.hdr_crc32	= apple_crc32(&kernel_header.magic2, crc32_area2_size, 0);
+    // crc32 of header finished
+
+    // copy header for next calculations
+    memcpy(src_mem, &kernel_header, sizeof(kernel_header));
+
+    // crc16 of kernel containter start
+    size_t crc16_area3_offset	= (size_t)&kernel_header.magic2 - (size_t)&kernel_header.magic;
+
+    kernel_header.ksize2 = sizeof(kernel_header) - crc16_area3_offset + kernel_header.kern_size;
+
+    kernel_header.kern_crc16 = jboot_crc16(src_mem + crc16_area3_offset, kernel_header.ksize2, 0);
+    if (opt_oldcrc) kernel_header.kern_crc16 -= 0x00FF; // old jboot crc
+    // crc16 of kernel containter finished
+
+    // copy header for next calculations
+    memcpy(src_mem, &kernel_header, sizeof(kernel_header));
+
+    // make copy of header for wierd crc16 calculations
+    size_t crc16_area2_size	= (size_t)&kernel_header.hdr_crc16 - (size_t)&kernel_header.magic;
+
+    memset(src_mem, 0x04, 1); // replace to original value for calculation
+    kernel_header.hdr_crc16 = ~jboot_crc16(src_mem, crc16_area2_size, 0);
+    memset(src_mem, 0xFF, 1); // replace to flash value for dump
+    // crc16 of header finished
+
+    // write kernel header
+    memcpy(src_mem, &kernel_header, sizeof(kernel_header));
+}
+
+void kernel_unit_make(unsigned char *src_mem, size_t kernel_size, size_t rootfs_size, uint32_t unixtime) {
+
+    unit_header_t unit_header;
+    memset(&unit_header, 0, sizeof(unit_header));
+
+    unit_header.timestamp = (unixtime - 0x35016f00) / 4;
+
+    // first try: static entries
+    sprintf(unit_header.devid, "LVA6E3804001");
+    unit_header.blocksize	= 0x00010000;
+    unit_header.flashpos1	= 0x00010000;
+    unit_header.flashpos2	= 0x00010000;
+    unit_header.partition_size	= 0x00170000;
+    unit_header.devid_bin	= 0x6e38;
+
+    unit_header.magic		= 0x00024842;
+    unit_header.payload_size	= sizeof(kernel_header_t) + kernel_size;
+    unit_header.type		= MAGIC_KERNEL;
+
+    kernel_header_make(src_mem + sizeof(unit_header_t), kernel_size, rootfs_size, unixtime);
+
+    // payload crc
+    unit_header.payload_crc16 = jboot_crc16(src_mem + sizeof(unit_header), unit_header.payload_size, 0);
+    if (opt_oldcrc) unit_header.payload_crc16 -= 0x00FF; // old jboot crc
+
+    // header crc
+    unit_header.header_crc16 = ~jboot_crc16(&unit_header, sizeof(unit_header), 0);
+
+    // write unit header
+    memcpy(src_mem, &unit_header, sizeof(unit_header));
+}
+
+void rootfs_unit_make(unsigned char *src_mem, size_t rootfs_size, uint32_t unixtime) {
+
+    unit_header_t unit_header;
+    memset(&unit_header, 0, sizeof(unit_header));
+
+    unit_header.timestamp = (unixtime - 0x35016f00) / 4;
+
+    // first try: static entries
+    sprintf(unit_header.devid, "LVA6E3804001");
+    unit_header.blocksize	= 0x00010000;
+    unit_header.flashpos1	= 0x00180000;
+    unit_header.flashpos2	= 0x00180000;
+    unit_header.partition_size	= 0x00d90000;
+    unit_header.devid_bin	= 0x6e38;
+
+    unit_header.magic		= 0x00024842;
+    unit_header.payload_size	= rootfs_size;
+    unit_header.type		= MAGIC_ROOTFS;
+
+    // payload crc
+    unit_header.payload_crc16 = jboot_crc16(src_mem + sizeof(unit_header), unit_header.payload_size, 0);
+    if (opt_oldcrc) unit_header.payload_crc16 -= 0x00FF; // old jboot crc
+
+    // header crc
+    unit_header.header_crc16 = ~jboot_crc16(&unit_header, sizeof(unit_header), 0);
+
+    // write unit header
+    memcpy(src_mem, &unit_header, sizeof(unit_header));
+}
 
 int main(int argc, char *argv[]) {
     char *input_name=NULL;
-    char *input_kernel_name=NULL, *input_rootfs_name=NULL, *input_branding_name=NULL;
+    char *input_kernel_name=NULL, *input_rootfs_name=NULL;
+    char *input_branding_name=NULL;
+    char *input_bootloader_name=NULL;
     char *output_name=NULL;
     char *profile_name=NULL;
 
@@ -626,10 +741,13 @@ int main(int argc, char *argv[]) {
     int retcode=0;
 
     int opt_make_branding=0;
+    int opt_make_firmware=0;
+    int opt_branding_add=0;
+    int opt_bootloader_add=0;
 
     int c;
     while ( 1 ) {
-        c = getopt(argc, argv, "cei:x:t:hb:o:");
+        c = getopt(argc, argv, "cei:x:t:hnu:b:k:r:o:");
         if (c == -1)
                 break;
 
@@ -654,8 +772,22 @@ int main(int argc, char *argv[]) {
                 case 'h':  // make branding header
                         opt_make_branding++;
 			break;
+                case 'n':  // make kernel header
+                        opt_make_firmware++;
+			break;
+                case 'u':  // specify bootloader name
+			input_bootloader_name = optarg;
+			opt_bootloader_add++;
+			break;
                 case 'b':  // specify branding name
 			input_branding_name = optarg;
+			opt_branding_add++;
+			break;
+                case 'k':  // specify kernel name
+			input_kernel_name = optarg;
+			break;
+                case 'r':  // specify kernel name
+			input_rootfs_name = optarg;
 			break;
                 case 'o':  // output file
 			output_name = optarg;
@@ -702,6 +834,8 @@ int main(int argc, char *argv[]) {
 	size_t input_size = ftell(source_file);
 	size_t result_size = input_size + sizeof(branding_header_t);
 
+	if (!unixtime) unixtime = time(NULL);
+
 	unsigned char *result_mem = malloc(result_size);
 	memset(result_mem, 0, result_size);
 
@@ -711,6 +845,112 @@ int main(int argc, char *argv[]) {
 
 	branding_header_make(result_mem, result_size, unixtime);
 	retcode += branding_sanity_check(result_mem, result_size);
+
+	if (retcode == 0) {
+	    retcode += data_extract(result_mem, result_size, output_name);
+	}
+    }
+    else if (opt_make_firmware && input_kernel_name && input_rootfs_name && output_name) {
+
+	size_t bootloader_size = 0, bootloader_pointer = 0;
+	size_t kernel_size = 0, kernel_pointer = 0;
+	size_t rootfs_size = 0, rootfs_pointer = 0;
+	size_t branding_size = 0;
+	size_t result_size = 0;
+	size_t result_pointer = 0;
+
+	FILE *bootloader_file = NULL;
+	FILE *kernel_file = NULL;
+	FILE *rootfs_file = NULL;
+	FILE *branding_file = NULL;
+
+	if (!unixtime) unixtime = time(NULL);
+
+if (opt_bootloader_add) {
+	bootloader_file = fopen(input_bootloader_name,"r");
+	if (bootloader_file == 0) {
+	    perror("Cannot open bootloader file for read");
+	    return 100;
+	}
+	fseek(bootloader_file, 0, SEEK_END);
+	bootloader_size = ftell(bootloader_file);
+
+	result_size += sizeof(unit_header_t) + bootloader_size; // add bootloader and its header
+}
+
+	kernel_file = fopen(input_kernel_name,"r");
+	if (kernel_file == 0) {
+	    perror("Cannot open kernel file for read");
+	    return 100;
+	}
+	fseek(kernel_file, 0, SEEK_END);
+	kernel_size = ftell(kernel_file);
+
+	result_size += sizeof(unit_header_t) + sizeof(kernel_header_t) + kernel_size; // add kernel and unit + kernel header
+
+	rootfs_file = fopen(input_rootfs_name,"r");
+	if (rootfs_file == 0) {
+	    perror("Cannot open rootfs file for read");
+	    return 100;
+	}
+	fseek(rootfs_file, 0, SEEK_END);
+	rootfs_size = ftell(rootfs_file);
+
+	result_size += sizeof(unit_header_t) + rootfs_size; // add rootfs and its header
+
+if (opt_branding_add) {
+	branding_file = fopen(input_branding_name,"r");
+	if (branding_file == 0) {
+	    perror("Cannot open branding file for read");
+	    return 100;
+	}
+	fseek(branding_file, 0, SEEK_END);
+	branding_size = ftell(branding_file);
+
+	result_size += branding_size; // add branding (header added via "-h" option if needed)
+}
+
+	unsigned char *result_mem = malloc(result_size);
+	memset(result_mem, 0, result_size);
+
+if (opt_bootloader_add) {
+	bootloader_pointer = result_pointer;
+	result_pointer += sizeof(unit_header_t);
+	fseek(bootloader_file, 0, SEEK_SET);
+	fread(result_mem + result_pointer, bootloader_size, 1, bootloader_file);
+	fclose(bootloader_file);
+
+//	bootloader_unit_make(result_mem + bootloader_pointer, bootloader_size, unixtime)
+
+	result_pointer += bootloader_size;
+}
+
+	kernel_pointer = result_pointer;
+	result_pointer += sizeof(unit_header_t) + sizeof(kernel_header_t);
+	fseek(kernel_file, 0, SEEK_SET);
+	fread(result_mem + result_pointer, kernel_size, 1, kernel_file);
+	fclose(kernel_file);
+	result_pointer += kernel_size;
+
+	rootfs_pointer = result_pointer;
+	fseek(rootfs_file, 0, SEEK_SET);
+	fread(result_mem + result_pointer, rootfs_size, 1, rootfs_file);
+	fclose(rootfs_file);
+	result_pointer += rootfs_size;
+
+	rootfs_unit_make(result_mem + rootfs_pointer, rootfs_size, unixtime);
+	kernel_unit_make(result_mem + kernel_pointer, kernel_size, rootfs_size, unixtime);
+
+if (opt_branding_add) {
+	fseek(branding_file, 0, SEEK_SET);
+	fread(result_mem + result_pointer, branding_size, 1, branding_file);
+	fclose(branding_file);
+	result_pointer += branding_size;
+}
+
+	while (retcode <= 100 && next_unit_pos < result_size) {
+	    retcode += unit_sanity_check(result_mem + next_unit_pos, result_size - next_unit_pos);
+	}
 
 	if (retcode == 0) {
 	    retcode += data_extract(result_mem, result_size, output_name);
@@ -726,7 +966,8 @@ int main(int argc, char *argv[]) {
 	fprintf(stderr, "  -i      Print headers and do sanity check on whole firmware or single container\n");
 	fprintf(stderr, "  -x      Extract payloads from whole firmware to bootloader.bin+kernel.bin+rootfs.bin+branding.bin\n");
 	fprintf(stderr, "  -t      Use specified unixtime for inclusion to image header\n");
-	fprintf(stderr, "  -h      Add branding header to input file { [-c] [-e] [-t unixtime ] -i input.bin -o output.bin }\n");
+	fprintf(stderr, "  -h      Add branding header to input file { [-c] [-e] [-t unixtime ] -b input.bin -o output.bin }\n");
+	fprintf(stderr, "  -n      Assemble whole firmware { -n [-c] [-e] [-t unixtime ] -k kernel.bin -r rootfs.bin -o output.bin }\n");
 	retcode++;
     }
 
