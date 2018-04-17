@@ -719,7 +719,6 @@ void rootfs_unit_make(unsigned char *src_mem, size_t rootfs_size, uint32_t unixt
 
     // payload crc
     unit_header.payload_crc16 = jboot_crc16(src_mem + sizeof(unit_header), unit_header.payload_size, 0);
-    if (opt_oldcrc) unit_header.payload_crc16 -= 0x00FF; // old jboot crc
 
     // header crc
     unit_header.header_crc16 = ~jboot_crc16(&unit_header, sizeof(unit_header), 0);
@@ -933,6 +932,7 @@ if (opt_bootloader_add) {
 	result_pointer += kernel_size;
 
 	rootfs_pointer = result_pointer;
+	result_pointer += sizeof(unit_header_t);
 	fseek(rootfs_file, 0, SEEK_SET);
 	fread(result_mem + result_pointer, rootfs_size, 1, rootfs_file);
 	fclose(rootfs_file);
