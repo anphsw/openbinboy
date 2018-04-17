@@ -19,6 +19,9 @@ Now only static kernel/bootloader offsets supported (see in code)
   -t      Use specified unixtime for inclusion to image header
   -h      Add branding header to input file { [-c] [-e] [-t unixtime ] -i input.bin -o output.bin }
   -n      Assemble whole firmware { -n [-c] [-e] [-t unixtime ] -k kernel.bin -r rootfs.bin [-u bootloader.bin] [-b branding.bin ] -o output.bin }
+  -L      Kernel load address for firmware creation (default 0x80000000)
+  -E      Kernel entry point for firmware creation (default 0x80000000)
+
 
 NOTES:
 1. Bootloader (and often branding) is not necessary
