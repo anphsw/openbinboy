@@ -26,6 +26,12 @@ int opt_bigendian=0;
 
 size_t next_unit_pos=0; // source file position for recursive checking of headers
 
+// non-static options used during image creation
+typedef struct firmware_params {
+	uint32_t kern_load_addr;	// 0x80000000
+	uint32_t kern_entry;		// kernel entry point - 0x80000000
+} firmware_params_t;
+
 typedef struct unit_header {
 	/* firmware part, not flashed */
 	char devid[12];			// device id like "LVA6E3804001"
@@ -73,6 +79,7 @@ typedef struct kernel_header {
 	uint32_t hdr_crc32;		// crc32 from magic2 to magic3 with zeroed crc field
 	uint32_t magic3;		// 28 00 00 00
 } kernel_header_t;
+
 
 typedef struct branding_header {
 	/* branding image part, not exist on TLW6E3804001 and new versions of LVA6E3804001, always on dlink and zyxel */
@@ -617,7 +624,7 @@ void branding_header_make(unsigned char *src_mem, size_t input_size, uint32_t un
     memcpy(src_mem, &branding_header, sizeof(branding_header));
 }
 
-void kernel_header_make(unsigned char *src_mem, size_t kernel_size, size_t rootfs_size, uint32_t unixtime) {
+void kernel_header_make(unsigned char *src_mem, size_t kernel_size, size_t rootfs_size, uint32_t unixtime, firmware_params_t firmware_params) {
 
     kernel_header_t kernel_header;
     memset(&kernel_header, 0, sizeof(kernel_header));
@@ -628,9 +635,9 @@ void kernel_header_make(unsigned char *src_mem, size_t kernel_size, size_t rootf
     kernel_header.magic2 = 0x02032124;
     kernel_header.magic3 = 0x00000028;
 
-    // first try: static entries
-    kernel_header.kern_load_addr	= 0x80000000;
-    kernel_header.kern_entry		= 0x80000000;
+    kernel_header.kern_load_addr	= firmware_params.kern_load_addr ? firmware_params.kern_load_addr : 0x80000000;
+    kernel_header.kern_entry		= firmware_params.kern_entry ? firmware_params.kern_entry : 0x80000000;;
+
     kernel_header.rootfs_load_addr	= 0xbc180000;
 
     kernel_header.kern_size = kernel_size;
@@ -672,7 +679,7 @@ void kernel_header_make(unsigned char *src_mem, size_t kernel_size, size_t rootf
     memcpy(src_mem, &kernel_header, sizeof(kernel_header));
 }
 
-void kernel_unit_make(unsigned char *src_mem, size_t kernel_size, size_t rootfs_size, uint32_t unixtime) {
+void kernel_unit_make(unsigned char *src_mem, size_t kernel_size, size_t rootfs_size, uint32_t unixtime, firmware_params_t firmware_params) {
 
     unit_header_t unit_header;
     memset(&unit_header, 0, sizeof(unit_header));
@@ -691,7 +698,7 @@ void kernel_unit_make(unsigned char *src_mem, size_t kernel_size, size_t rootfs_
     unit_header.payload_size	= sizeof(kernel_header_t) + kernel_size;
     unit_header.type		= MAGIC_KERNEL;
 
-    kernel_header_make(src_mem + sizeof(unit_header_t), kernel_size, rootfs_size, unixtime);
+    kernel_header_make(src_mem + sizeof(unit_header_t), kernel_size, rootfs_size, unixtime, firmware_params);
 
     // payload crc
     unit_header.payload_crc16 = jboot_crc16(src_mem + sizeof(unit_header), unit_header.payload_size, 0);
@@ -802,6 +809,9 @@ int main(int argc, char *argv[]) {
     char *output_name=NULL;
     char *profile_name=NULL;
 
+    firmware_params_t firmware_params;
+    memset(&firmware_params, 0, sizeof(firmware_params));
+
     uint32_t unixtime=0;
 
     int retcode=0;
@@ -813,7 +823,7 @@ int main(int argc, char *argv[]) {
 
     int c;
     while ( 1 ) {
-        c = getopt(argc, argv, "cei:x:t:hnu:b:k:r:o:");
+        c = getopt(argc, argv, "cei:x:t:hnu:b:k:r:o:L:E:");
         if (c == -1)
                 break;
 
@@ -858,6 +868,14 @@ int main(int argc, char *argv[]) {
                 case 'o':  // output file
 			output_name = optarg;
 			break;
+                case 'L':  // kernel load address
+			if (!sscanf(optarg, "0x%08x", &firmware_params.kern_load_addr)) goto print_usage;
+			break;
+                case 'E':  // kernel entry point
+			if (!sscanf(optarg, "0x%08x", &firmware_params.kern_entry)) goto print_usage;
+
+			break;
+
                 default:
                         break;
                 }
@@ -1012,7 +1030,7 @@ if (opt_bootloader_add) {
 
 	// kernel contains rootfs CRC, so order is matter
 	rootfs_unit_make(result_mem + rootfs_pointer, rootfs_size, unixtime);
-	kernel_unit_make(result_mem + kernel_pointer, kernel_size, rootfs_size, unixtime);
+	kernel_unit_make(result_mem + kernel_pointer, kernel_size, rootfs_size, unixtime, firmware_params);
 
 	// 4. branding
 if (opt_branding_add) {
@@ -1049,6 +1067,8 @@ if (opt_branding_add) {
 	fprintf(stderr, "  -t      Use specified unixtime for inclusion to image header\n");
 	fprintf(stderr, "  -h      Add branding header to input file { [-c] [-e] [-t unixtime ] -b input.bin -o output.bin }\n");
 	fprintf(stderr, "  -n      Assemble whole firmware { -n [-c] [-e] [-t unixtime ] -k kernel.bin -r rootfs.bin [-u bootloader.bin] [-b branding.bin ] -o output.bin }\n");
+	fprintf(stderr, "  -L      Kernel load address for firmware creation (default 0x80000000)\n");
+	fprintf(stderr, "  -E      Kernel entry point for firmware creation (default 0x80000000)\n");
 	retcode++;
     }
 
