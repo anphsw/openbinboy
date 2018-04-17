@@ -52,6 +52,8 @@ typedef struct unit_header {
 #define MAGIC_ROOTFS		0x00080000
 #define MAGIC_BRANDING		0x00050000
 #define MAGIC_BRANDING2		0x04050000
+// static header magic
+#define MAGIC_UNIT		0x00024842
 
 typedef struct kernel_header {
 	/* kernel image part, flashed */
@@ -691,7 +693,7 @@ void kernel_unit_make(unsigned char *src_mem, size_t kernel_size, size_t rootfs_
     unit_header.partition_size	= 0x00170000;
     unit_header.devid_bin	= 0x6e38;
 
-    unit_header.magic		= 0x00024842;
+    unit_header.magic		= MAGIC_UNIT;
     unit_header.payload_size	= sizeof(kernel_header_t) + kernel_size;
     unit_header.type		= MAGIC_KERNEL;
 
@@ -723,7 +725,7 @@ void rootfs_unit_make(unsigned char *src_mem, size_t rootfs_size, uint32_t unixt
     unit_header.partition_size	= 0x00d90000;
     unit_header.devid_bin	= 0x6e38;
 
-    unit_header.magic		= 0x00024842;
+    unit_header.magic		= MAGIC_UNIT;
     unit_header.payload_size	= rootfs_size;
     unit_header.type		= MAGIC_ROOTFS;
 
@@ -752,7 +754,7 @@ void bootloader_unit_make(unsigned char *src_mem, size_t bootloader_size, uint32
     unit_header.partition_size	= 0x00010000;
     unit_header.devid_bin	= 0x6e38;
 
-    unit_header.magic		= 0x00024842;
+    unit_header.magic		= MAGIC_UNIT;
     unit_header.payload_size	= bootloader_size;
     unit_header.type		= MAGIC_BOOTLOADER;
 
@@ -782,7 +784,7 @@ void branding_unit_make(unsigned char *src_mem, size_t branding_size, uint32_t u
     unit_header.partition_size	= 0x000e0000;
     unit_header.devid_bin	= 0x6e38;
 
-    unit_header.magic		= 0x00024842;
+    unit_header.magic		= MAGIC_UNIT;
 
     unit_header.payload_size	= branding_size;
     unit_header.type		= MAGIC_BRANDING;
