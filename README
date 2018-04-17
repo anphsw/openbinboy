@@ -8,8 +8,8 @@ Zyxel LTE 3301
 Zyxel LTE 3311
 Lava Telecom LR-25G001
 
+Now only static kernel/bootloader offsets supported (see in code)
 
-Now only sanity check (with all CRC calculations), header display, making branding header finished.
 ./openbinboy [-c] [-e] < -i input.bin | -x input.bin >
 
   -c      Use old style jboot CRC for some calculations (DWR-921 and others), if you see CRC mismatches, try this option
@@ -18,3 +18,9 @@ Now only sanity check (with all CRC calculations), header display, making brandi
   -x      Extract files from whole firmware to bootloader.bin + kernel.bin + rootfs.bin + branding.bin
   -t      Use specified unixtime for inclusion to image header
   -h      Add branding header to input file { [-c] [-e] [-t unixtime ] -i input.bin -o output.bin }
+  -n      Assemble whole firmware { -n [-c] [-e] [-t unixtime ] -k kernel.bin -r rootfs.bin [-u bootloader.bin] [-b branding.bin ] -o output.bin }
+
+NOTES:
+1. Bootloader is not necessary
+2. Branding partition optionally contain branding header (can be created with -h option)
+3. All partitions seen in such firmwares is "Squashfs filesystem, little endian, version 4.0, compression:gzip"

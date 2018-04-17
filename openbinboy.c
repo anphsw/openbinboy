@@ -482,6 +482,7 @@ int unit_sanity_check(unsigned char *src_mem, size_t input_size) {
     size_t calc_data_size = sizeof(unit_header) + unit_header.payload_size;
 
     printf("-- Container checks:\n");
+
     printf("Maximum data size of unit   ");
     if (calc_data_size <= input_size) {
 	printf("OK        : %zu bytes\n", calc_data_size);
@@ -757,6 +758,36 @@ void bootloader_unit_make(unsigned char *src_mem, size_t bootloader_size, uint32
     memcpy(src_mem, &unit_header, sizeof(unit_header));
 }
 
+void branding_unit_make(unsigned char *src_mem, size_t branding_size, uint32_t unixtime) {
+
+    unit_header_t unit_header;
+    memset(&unit_header, 0, sizeof(unit_header));
+
+    unit_header.timestamp = (unixtime - 0x35016f00) / 4;
+
+    // first try: static entries
+    sprintf(unit_header.devid, "LVA6E3804001");
+    unit_header.blocksize	= 0x00010000;
+    unit_header.flashpos1	= 0x00f10000;
+    unit_header.flashpos2	= 0x00f10000;
+    unit_header.partition_size	= 0x000e0000;
+    unit_header.devid_bin	= 0x6e38;
+
+    unit_header.magic		= 0x00024842;
+
+    unit_header.payload_size	= branding_size;
+    unit_header.type		= MAGIC_BRANDING;
+
+    // payload crc
+    unit_header.payload_crc16 = jboot_crc16(src_mem + sizeof(unit_header), unit_header.payload_size, 0);
+
+    // header crc
+    unit_header.header_crc16 = ~jboot_crc16(&unit_header, sizeof(unit_header), 0);
+
+    // write unit header
+    memcpy(src_mem, &unit_header, sizeof(unit_header));
+}
+
 
 int main(int argc, char *argv[]) {
     char *input_name=NULL;
@@ -885,9 +916,8 @@ int main(int argc, char *argv[]) {
 	size_t bootloader_size = 0, bootloader_pointer = 0;
 	size_t kernel_size = 0, kernel_pointer = 0;
 	size_t rootfs_size = 0, rootfs_pointer = 0;
-	size_t branding_size = 0;
-	size_t result_size = 0;
-	size_t result_pointer = 0;
+	size_t branding_size = 0, branding_pointer = 0;
+	size_t result_size = 0, result_pointer = 0;
 
 	FILE *bootloader_file = NULL;
 	FILE *kernel_file = NULL;
@@ -937,12 +967,13 @@ if (opt_branding_add) {
 	fseek(branding_file, 0, SEEK_END);
 	branding_size = ftell(branding_file);
 
-	result_size += branding_size; // add branding (header added via "-h" option if needed)
+	result_size += sizeof(unit_header_t) + branding_size; // add branding (header added via "-h" option if needed)
 }
 
 	unsigned char *result_mem = malloc(result_size);
 	memset(result_mem, 0, result_size);
 
+	// 1. bootloader
 if (opt_bootloader_add) {
 	bootloader_pointer = result_pointer;
 	result_pointer += sizeof(unit_header_t);
@@ -955,6 +986,7 @@ if (opt_bootloader_add) {
 	result_pointer += bootloader_size;
 }
 
+	// 2. kernel
 	kernel_pointer = result_pointer;
 	result_pointer += sizeof(unit_header_t) + sizeof(kernel_header_t);
 	fseek(kernel_file, 0, SEEK_SET);
@@ -962,6 +994,7 @@ if (opt_bootloader_add) {
 	fclose(kernel_file);
 	result_pointer += kernel_size;
 
+	// 3. rootfs
 	rootfs_pointer = result_pointer;
 	result_pointer += sizeof(unit_header_t);
 	fseek(rootfs_file, 0, SEEK_SET);
@@ -969,16 +1002,23 @@ if (opt_bootloader_add) {
 	fclose(rootfs_file);
 	result_pointer += rootfs_size;
 
+	// kernel contains rootfs CRC, so order is matter
 	rootfs_unit_make(result_mem + rootfs_pointer, rootfs_size, unixtime);
 	kernel_unit_make(result_mem + kernel_pointer, kernel_size, rootfs_size, unixtime);
 
+	// 4. branding
 if (opt_branding_add) {
+	branding_pointer = result_pointer;
+	result_pointer += sizeof(unit_header_t);
 	fseek(branding_file, 0, SEEK_SET);
 	fread(result_mem + result_pointer, branding_size, 1, branding_file);
 	fclose(branding_file);
 	result_pointer += branding_size;
+
+	branding_unit_make(result_mem + branding_pointer, branding_size, unixtime);
 }
 
+	// self-check sequence
 	while (retcode <= 100 && next_unit_pos < result_size) {
 	    retcode += unit_sanity_check(result_mem + next_unit_pos, result_size - next_unit_pos);
 	}
@@ -998,7 +1038,7 @@ if (opt_branding_add) {
 	fprintf(stderr, "  -x      Extract payloads from whole firmware to bootloader.bin+kernel.bin+rootfs.bin+branding.bin\n");
 	fprintf(stderr, "  -t      Use specified unixtime for inclusion to image header\n");
 	fprintf(stderr, "  -h      Add branding header to input file { [-c] [-e] [-t unixtime ] -b input.bin -o output.bin }\n");
-	fprintf(stderr, "  -n      Assemble whole firmware { -n [-c] [-e] [-t unixtime ] -k kernel.bin -r rootfs.bin -o output.bin }\n");
+	fprintf(stderr, "  -n      Assemble whole firmware { -n [-c] [-e] [-t unixtime ] -k kernel.bin -r rootfs.bin [-u bootloader.bin] [-b branding.bin ] -o output.bin }\n");
 	retcode++;
     }
 
