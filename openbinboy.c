@@ -727,6 +727,37 @@ void rootfs_unit_make(unsigned char *src_mem, size_t rootfs_size, uint32_t unixt
     memcpy(src_mem, &unit_header, sizeof(unit_header));
 }
 
+void bootloader_unit_make(unsigned char *src_mem, size_t bootloader_size, uint32_t unixtime) {
+
+    unit_header_t unit_header;
+    memset(&unit_header, 0, sizeof(unit_header));
+
+    unit_header.timestamp = (unixtime - 0x35016f00) / 4;
+
+    // first try: static entries
+    sprintf(unit_header.devid, "LVA6E3804001");
+    unit_header.blocksize	= 0x00010000;
+    unit_header.flashpos1	= 0x00000000;
+    unit_header.flashpos2	= 0x00000000;
+    unit_header.partition_size	= 0x00010000;
+    unit_header.devid_bin	= 0x6e38;
+
+    unit_header.magic		= 0x00024842;
+    unit_header.payload_size	= bootloader_size;
+    unit_header.type		= MAGIC_BOOTLOADER;
+
+    // payload crc
+    unit_header.payload_crc16 = jboot_crc16(src_mem + sizeof(unit_header), unit_header.payload_size, 0);
+    if (opt_oldcrc) unit_header.payload_crc16 -= 0x00FF; // old jboot crc
+
+    // header crc
+    unit_header.header_crc16 = ~jboot_crc16(&unit_header, sizeof(unit_header), 0);
+
+    // write unit header
+    memcpy(src_mem, &unit_header, sizeof(unit_header));
+}
+
+
 int main(int argc, char *argv[]) {
     char *input_name=NULL;
     char *input_kernel_name=NULL, *input_rootfs_name=NULL;
@@ -919,7 +950,7 @@ if (opt_bootloader_add) {
 	fread(result_mem + result_pointer, bootloader_size, 1, bootloader_file);
 	fclose(bootloader_file);
 
-//	bootloader_unit_make(result_mem + bootloader_pointer, bootloader_size, unixtime)
+	bootloader_unit_make(result_mem + bootloader_pointer, bootloader_size, unixtime);
 
 	result_pointer += bootloader_size;
 }
