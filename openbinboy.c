@@ -291,7 +291,7 @@ void branding_header_print(branding_header_t branding_header) {
 
 int data_extract(unsigned char* extract_ptr, size_t extract_size, char name[]) {
 	printf("--\n");
-	printf("Extracting unit %s payload at position %u, size %u ...\n\n", name, next_unit_pos, extract_size);
+	printf("Extracting unit %s payload at position %zu, size %zu ...\n\n", name, next_unit_pos, extract_size);
 
 	FILE* fd_extract = fopen(name,"wb");
 	if (fd_extract == 0) {
@@ -331,9 +331,7 @@ int kernel_sanity_check(unsigned char *src_mem, size_t input_size) {
     uint32_t calc_rootfs_crc = apple_crc32(src_mem + sizeof(kernel_header) + kernel_header.kern_size + sizeof(unit_header_t), kernel_header.rootfs_size, 0);
 
     // make copy of header for wierd crc16 calculations
-    void *crc16_area2_start	= &kernel_header.magic;
-    void *crc16_area2_end	= &kernel_header.hdr_crc16;
-    int crc16_area2_size	= crc16_area2_end - crc16_area2_start;
+    size_t crc16_area2_size	= (size_t)&kernel_header.hdr_crc16 - (size_t)&kernel_header.magic;
 
     uint8_t *hdrcopy16 = malloc(crc16_area2_size);
 
@@ -345,18 +343,14 @@ int kernel_sanity_check(unsigned char *src_mem, size_t input_size) {
     // crc16 of header finished
 
     // crc16 of kernel containter start
-    void *crc16_area3_start	= &kernel_header.magic;
-    void *crc16_area3_end	= &kernel_header.magic2;
-    int crc16_area3_offset	= crc16_area3_end - crc16_area3_start;
+    size_t crc16_area3_offset	= (size_t)&kernel_header.magic2 - (size_t)&kernel_header.magic;
 
     uint16_t calc_kern_crc16 = jboot_crc16(src_mem + crc16_area3_offset, kernel_header.ksize2, 0);
     if (opt_oldcrc) calc_kern_crc16 -= 0x00FF; // old jboot crc
     // crc16 of kernel containter finished
 
     // make copy of header for crc32 calculations
-    void *crc32_area2_start	= &kernel_header.magic2;
-    void *crc32_area2_end	= &kernel_header.magic3;
-    int crc32_area2_size	= crc32_area2_end - crc32_area2_start + sizeof(kernel_header.hdr_crc32);
+    size_t crc32_area2_size	= (size_t)&kernel_header.magic3 - (size_t)&kernel_header.magic2 + sizeof(kernel_header.hdr_crc32);
 
     uint8_t *hdrcopy32 = malloc(crc32_area2_size);
 
@@ -839,7 +833,7 @@ int main(int argc, char *argv[]) {
                         opt_extract++;
 			break;
                 case 't':  // unixtime
-			if (!sscanf(optarg, "%u", &unixtime)) goto print_usage;
+			if (!sscanf(optarg, "%10u", &unixtime)) goto print_usage;
 			break;
                 case 'h':  // make branding header
                         opt_make_branding++;
@@ -893,6 +887,7 @@ int main(int argc, char *argv[]) {
 	}
 
 	free(src_mem);
+	goto exit;
     }
     else if (opt_make_branding && input_branding_name && output_name) {
 
@@ -921,6 +916,8 @@ int main(int argc, char *argv[]) {
 	if (retcode == 0) {
 	    retcode += data_extract(result_mem, result_size, output_name);
 	}
+	free(result_mem);
+	goto exit;
     }
     else if (opt_make_firmware && input_kernel_name && input_rootfs_name && output_name) {
 
@@ -1037,6 +1034,8 @@ if (opt_branding_add) {
 	if (retcode == 0) {
 	    retcode += data_extract(result_mem, result_size, output_name);
 	}
+	free(result_mem);
+	goto exit;
     }
     else {
 	print_usage:
@@ -1053,5 +1052,6 @@ if (opt_branding_add) {
 	retcode++;
     }
 
+    exit:
     return retcode;
 };
