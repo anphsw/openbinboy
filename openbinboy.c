@@ -491,6 +491,15 @@ int unit_sanity_check(unsigned char *src_mem, size_t input_size) {
 	retcode+=100;
     }
 
+    printf("Payload ");
+    if (unit_header.partition_size >= unit_header.payload_size) {
+        printf("fits ");
+    } else {
+        printf("DOES NOT FIT ");
+        retcode+=100;
+    }
+    printf("partition.\n");
+
     // data size mismatch is fatal error!
     if (retcode > 0) goto exit;
 
