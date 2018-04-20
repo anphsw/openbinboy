@@ -30,6 +30,8 @@ size_t next_unit_pos=0; // source file position for recursive checking of header
 typedef struct firmware_params {
 	uint32_t kern_load_addr;	// 0x80000000
 	uint32_t kern_entry;		// kernel entry point - 0x80000000
+	char devid[12];
+	unsigned int devid_bin;
 } firmware_params_t;
 
 typedef struct unit_header {
@@ -687,12 +689,13 @@ void kernel_unit_make(unsigned char *src_mem, size_t kernel_size, size_t rootfs_
     unit_header.timestamp = (unixtime - 0x35016f00) / 4;
 
     // first try: static entries
-    sprintf(unit_header.devid, "LVA6E3804001");
     unit_header.blocksize	= 0x00010000;
     unit_header.flashpos1	= 0x00010000;
     unit_header.flashpos2	= 0x00010000;
     unit_header.partition_size	= 0x00170000;
-    unit_header.devid_bin	= 0x6e38;
+
+    memcpy(&unit_header.devid, &firmware_params.devid, sizeof(unit_header.devid));
+    unit_header.devid_bin	= (uint16_t)firmware_params.devid_bin;
 
     unit_header.magic		= MAGIC_UNIT;
     unit_header.payload_size	= sizeof(kernel_header_t) + kernel_size;
@@ -711,7 +714,7 @@ void kernel_unit_make(unsigned char *src_mem, size_t kernel_size, size_t rootfs_
     memcpy(src_mem, &unit_header, sizeof(unit_header));
 }
 
-void rootfs_unit_make(unsigned char *src_mem, size_t rootfs_size, uint32_t unixtime) {
+void rootfs_unit_make(unsigned char *src_mem, size_t rootfs_size, uint32_t unixtime, firmware_params_t firmware_params) {
 
     unit_header_t unit_header;
     memset(&unit_header, 0, sizeof(unit_header));
@@ -719,16 +722,17 @@ void rootfs_unit_make(unsigned char *src_mem, size_t rootfs_size, uint32_t unixt
     unit_header.timestamp = (unixtime - 0x35016f00) / 4;
 
     // first try: static entries
-    sprintf(unit_header.devid, "LVA6E3804001");
     unit_header.blocksize	= 0x00010000;
     unit_header.flashpos1	= 0x00180000;
     unit_header.flashpos2	= 0x00180000;
     unit_header.partition_size	= 0x00d90000;
-    unit_header.devid_bin	= 0x6e38;
 
     unit_header.magic		= MAGIC_UNIT;
     unit_header.payload_size	= rootfs_size;
     unit_header.type		= MAGIC_ROOTFS;
+
+    memcpy(&unit_header.devid, &firmware_params.devid, sizeof(unit_header.devid));
+    unit_header.devid_bin	= (uint16_t)firmware_params.devid_bin;
 
     // payload crc
     unit_header.payload_crc16 = jboot_crc16(src_mem + sizeof(unit_header), unit_header.payload_size, 0);
@@ -740,7 +744,7 @@ void rootfs_unit_make(unsigned char *src_mem, size_t rootfs_size, uint32_t unixt
     memcpy(src_mem, &unit_header, sizeof(unit_header));
 }
 
-void bootloader_unit_make(unsigned char *src_mem, size_t bootloader_size, uint32_t unixtime) {
+void bootloader_unit_make(unsigned char *src_mem, size_t bootloader_size, uint32_t unixtime, firmware_params_t firmware_params) {
 
     unit_header_t unit_header;
     memset(&unit_header, 0, sizeof(unit_header));
@@ -748,16 +752,17 @@ void bootloader_unit_make(unsigned char *src_mem, size_t bootloader_size, uint32
     unit_header.timestamp = (unixtime - 0x35016f00) / 4;
 
     // first try: static entries
-    sprintf(unit_header.devid, "LVA6E3804001");
     unit_header.blocksize	= 0x00010000;
     unit_header.flashpos1	= 0x00000000;
     unit_header.flashpos2	= 0x00000000;
     unit_header.partition_size	= 0x00010000;
-    unit_header.devid_bin	= 0x6e38;
 
     unit_header.magic		= MAGIC_UNIT;
     unit_header.payload_size	= bootloader_size;
     unit_header.type		= MAGIC_BOOTLOADER;
+
+    memcpy(&unit_header.devid, &firmware_params.devid, sizeof(unit_header.devid));
+    unit_header.devid_bin	= (uint16_t)firmware_params.devid_bin;
 
     // payload crc
     unit_header.payload_crc16 = jboot_crc16(src_mem + sizeof(unit_header), unit_header.payload_size, 0);
@@ -770,7 +775,7 @@ void bootloader_unit_make(unsigned char *src_mem, size_t bootloader_size, uint32
     memcpy(src_mem, &unit_header, sizeof(unit_header));
 }
 
-void branding_unit_make(unsigned char *src_mem, size_t branding_size, uint32_t unixtime) {
+void branding_unit_make(unsigned char *src_mem, size_t branding_size, uint32_t unixtime, firmware_params_t firmware_params) {
 
     unit_header_t unit_header;
     memset(&unit_header, 0, sizeof(unit_header));
@@ -778,17 +783,18 @@ void branding_unit_make(unsigned char *src_mem, size_t branding_size, uint32_t u
     unit_header.timestamp = (unixtime - 0x35016f00) / 4;
 
     // first try: static entries
-    sprintf(unit_header.devid, "LVA6E3804001");
     unit_header.blocksize	= 0x00010000;
     unit_header.flashpos1	= 0x00f10000;
     unit_header.flashpos2	= 0x00f10000;
     unit_header.partition_size	= 0x000e0000;
-    unit_header.devid_bin	= 0x6e38;
 
     unit_header.magic		= MAGIC_UNIT;
 
     unit_header.payload_size	= branding_size;
     unit_header.type		= MAGIC_BRANDING;
+
+    memcpy(&unit_header.devid, &firmware_params.devid, sizeof(unit_header.devid));
+    unit_header.devid_bin	= (uint16_t)firmware_params.devid_bin;
 
     // payload crc
     unit_header.payload_crc16 = jboot_crc16(src_mem + sizeof(unit_header), unit_header.payload_size, 0);
@@ -823,7 +829,7 @@ int main(int argc, char *argv[]) {
 
     int c;
     while ( 1 ) {
-        c = getopt(argc, argv, "cei:x:t:hnu:b:k:r:o:L:E:");
+        c = getopt(argc, argv, "cei:x:t:hnu:b:k:r:o:L:E:I:V:");
         if (c == -1)
                 break;
 
@@ -873,7 +879,12 @@ int main(int argc, char *argv[]) {
 			break;
                 case 'E':  // kernel entry point
 			if (!sscanf(optarg, "0x%08x", &firmware_params.kern_entry)) goto print_usage;
-
+			break;
+                case 'I':  // devid (text)
+			if (!sscanf(optarg, "%12s", &firmware_params.devid[0])) goto print_usage;
+			break;
+                case 'V':  // devid(binary)
+			if (!sscanf(optarg, "0x%04x", &firmware_params.devid_bin)) goto print_usage;
 			break;
 
                 default:
@@ -881,6 +892,12 @@ int main(int argc, char *argv[]) {
                 }
     }
 
+    // add default values if not specified
+    if (!firmware_params.devid[0]) {
+	char defaultid[] = "LVA6E3804001";
+	memcpy(&firmware_params.devid, &defaultid, sizeof(firmware_params.devid));
+    }
+    if (!firmware_params.devid_bin) firmware_params.devid_bin = 0x6e38;
 
     /* чтение и разбор прошивки */
     if (opt_info || opt_extract) {
@@ -1007,7 +1024,7 @@ if (opt_bootloader_add) {
 	fread(result_mem + result_pointer, bootloader_size, 1, bootloader_file);
 	fclose(bootloader_file);
 
-	bootloader_unit_make(result_mem + bootloader_pointer, bootloader_size, unixtime);
+	bootloader_unit_make(result_mem + bootloader_pointer, bootloader_size, unixtime, firmware_params);
 
 	result_pointer += bootloader_size;
 }
@@ -1029,7 +1046,7 @@ if (opt_bootloader_add) {
 	result_pointer += rootfs_size;
 
 	// kernel contains rootfs CRC, so order is matter
-	rootfs_unit_make(result_mem + rootfs_pointer, rootfs_size, unixtime);
+	rootfs_unit_make(result_mem + rootfs_pointer, rootfs_size, unixtime, firmware_params);
 	kernel_unit_make(result_mem + kernel_pointer, kernel_size, rootfs_size, unixtime, firmware_params);
 
 	// 4. branding
@@ -1041,7 +1058,7 @@ if (opt_branding_add) {
 	fclose(branding_file);
 	result_pointer += branding_size;
 
-	branding_unit_make(result_mem + branding_pointer, branding_size, unixtime);
+	branding_unit_make(result_mem + branding_pointer, branding_size, unixtime, firmware_params);
 }
 
 	// self-check sequence
@@ -1069,6 +1086,8 @@ if (opt_branding_add) {
 	fprintf(stderr, "  -n      Assemble whole firmware { -n [-c] [-e] [-t unixtime ] -k kernel.bin -r rootfs.bin [-u bootloader.bin] [-b branding.bin ] -o output.bin }\n");
 	fprintf(stderr, "  -L      Kernel load address for firmware creation (default 0x80000000)\n");
 	fprintf(stderr, "  -E      Kernel entry point for firmware creation (default 0x80000000)\n");
+	fprintf(stderr, "  -I      Device ID (text) for build firmware (default \"LVA6E3804001\")\n");
+	fprintf(stderr, "  -V      Device ID (binary) for build firmware (0x6e38)\n");
 	retcode++;
     }
 
