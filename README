@@ -2,6 +2,8 @@ This is firmware pack/unpack utility for jboot-based routers.
 You also need squashfs and unsquashfs (you can get it from firmware-mod-kit) of corresponding versions.
 
 OpenSource replacement for binboy from SDK found in:
+D-Link DIR-510L
+D-Link DWR-116
 D-Link DWR-521 Rev.B
 D-Link DWR-921
 Zyxel LTE 3301
