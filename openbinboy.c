@@ -63,6 +63,14 @@ typedef struct unit_header {
 // static header magic
 #define MAGIC_UNIT		0x00024842
 
+// firmware defaults
+#define BLOCKSIZE		0x00010000
+#define DEFAULT_DEVID		"LVA6E3804001"
+#define DEFAULT_DEVID_BIN	0x6e38
+#define DEFAULT_KERN_LOAD	0x80000000 //kernel load address
+#define DEFAULT_KERN_ENTRY	0x80000000 //kernel entry point
+
+
 typedef struct kernel_header {
 	/* kernel image part, flashed */
 	uint32_t magic;			// FF 04 24 2B
@@ -637,8 +645,8 @@ void kernel_header_make(unsigned char *src_mem, size_t kernel_size, size_t rootf
     kernel_header.magic2 = 0x02032124;
     kernel_header.magic3 = 0x00000028;
 
-    kernel_header.kern_load_addr	= firmware_params.kern_load_addr ? firmware_params.kern_load_addr : 0x80000000;
-    kernel_header.kern_entry		= firmware_params.kern_entry ? firmware_params.kern_entry : 0x80000000;;
+    kernel_header.kern_load_addr	= firmware_params.kern_load_addr ? firmware_params.kern_load_addr : DEFAULT_KERN_LOAD;
+    kernel_header.kern_entry		= firmware_params.kern_entry ? firmware_params.kern_entry : DEFAULT_KERN_ENTRY;
 
     kernel_header.rootfs_load_addr	= 0xbc180000;
 
@@ -689,7 +697,7 @@ void kernel_unit_make(unsigned char *src_mem, size_t kernel_size, size_t rootfs_
     unit_header.timestamp = (unixtime - 0x35016f00) / 4;
 
     // first try: static entries
-    unit_header.blocksize	= 0x00010000;
+    unit_header.blocksize	= BLOCKSIZE;
     unit_header.flashpos1	= 0x00010000;
     unit_header.flashpos2	= 0x00010000;
     unit_header.partition_size	= 0x00170000;
@@ -722,7 +730,7 @@ void rootfs_unit_make(unsigned char *src_mem, size_t rootfs_size, uint32_t unixt
     unit_header.timestamp = (unixtime - 0x35016f00) / 4;
 
     // first try: static entries
-    unit_header.blocksize	= 0x00010000;
+    unit_header.blocksize	= BLOCKSIZE;
     unit_header.flashpos1	= 0x00180000;
     unit_header.flashpos2	= 0x00180000;
     unit_header.partition_size	= 0x00d90000;
@@ -752,7 +760,7 @@ void bootloader_unit_make(unsigned char *src_mem, size_t bootloader_size, uint32
     unit_header.timestamp = (unixtime - 0x35016f00) / 4;
 
     // first try: static entries
-    unit_header.blocksize	= 0x00010000;
+    unit_header.blocksize	= BLOCKSIZE;
     unit_header.flashpos1	= 0x00000000;
     unit_header.flashpos2	= 0x00000000;
     unit_header.partition_size	= 0x00010000;
@@ -783,7 +791,7 @@ void branding_unit_make(unsigned char *src_mem, size_t branding_size, uint32_t u
     unit_header.timestamp = (unixtime - 0x35016f00) / 4;
 
     // first try: static entries
-    unit_header.blocksize	= 0x00010000;
+    unit_header.blocksize	= BLOCKSIZE;
     unit_header.flashpos1	= 0x00f10000;
     unit_header.flashpos2	= 0x00f10000;
     unit_header.partition_size	= 0x000e0000;
@@ -894,10 +902,10 @@ int main(int argc, char *argv[]) {
 
     // add default values if not specified
     if (!firmware_params.devid[0]) {
-	char defaultid[] = "LVA6E3804001";
+	char defaultid[] = DEFAULT_DEVID;
 	memcpy(&firmware_params.devid, &defaultid, sizeof(firmware_params.devid));
     }
-    if (!firmware_params.devid_bin) firmware_params.devid_bin = 0x6e38;
+    if (!firmware_params.devid_bin) firmware_params.devid_bin = DEFAULT_DEVID_BIN;
 
     /* чтение и разбор прошивки */
     if (opt_info || opt_extract) {
