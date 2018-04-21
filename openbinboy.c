@@ -30,7 +30,7 @@ size_t next_unit_pos=0; // source file position for recursive checking of header
 typedef struct firmware_params {
 	uint32_t kern_load_addr;	// 0x80000000
 	uint32_t kern_entry;		// kernel entry point - 0x80000000
-	char devid[12];
+	char devid[16];			// actual size is 12 (or 14 if padding0 is wrongly detected)
 	unsigned int devid_bin;
 } firmware_params_t;
 
