@@ -67,9 +67,13 @@ typedef struct unit_header {
 #define BLOCKSIZE		0x00010000
 #define DEFAULT_DEVID		"LVA6E3804001"
 #define DEFAULT_DEVID_BIN	0x6e38
-#define DEFAULT_KERN_LOAD	0x80000000 //kernel load address
-#define DEFAULT_KERN_ENTRY	0x80000000 //kernel entry point
+#define DEFAULT_KERN_LOAD	0x80000000 // kernel load address
+#define DEFAULT_KERN_ENTRY	0x80000000 // kernel entry point
 
+#define FLASH_BASE		0xbc000000 // flash address space start
+#define DEFAULT_KERNEL_PTR	0x00010000
+#define DEFAULT_ROOTFS_PTR	0x00180000
+#define DEFAULT_BRANDING_PTR	0x00f10000
 
 typedef struct kernel_header {
 	/* kernel image part, flashed */
@@ -648,7 +652,7 @@ void kernel_header_make(unsigned char *src_mem, size_t kernel_size, size_t rootf
     kernel_header.kern_load_addr	= firmware_params.kern_load_addr ? firmware_params.kern_load_addr : DEFAULT_KERN_LOAD;
     kernel_header.kern_entry		= firmware_params.kern_entry ? firmware_params.kern_entry : DEFAULT_KERN_ENTRY;
 
-    kernel_header.rootfs_load_addr	= 0xbc180000;
+    kernel_header.rootfs_load_addr	= FLASH_BASE + DEFAULT_ROOTFS_PTR;
 
     kernel_header.kern_size = kernel_size;
     kernel_header.rootfs_size = rootfs_size;
@@ -698,8 +702,8 @@ void kernel_unit_make(unsigned char *src_mem, size_t kernel_size, size_t rootfs_
 
     // first try: static entries
     unit_header.blocksize	= BLOCKSIZE;
-    unit_header.flashpos1	= 0x00010000;
-    unit_header.flashpos2	= 0x00010000;
+    unit_header.flashpos1	= DEFAULT_KERNEL_PTR;
+    unit_header.flashpos2	= DEFAULT_KERNEL_PTR;
 
     memcpy(&unit_header.devid, &firmware_params.devid, sizeof(unit_header.devid));
     unit_header.devid_bin	= (uint16_t)firmware_params.devid_bin;
@@ -731,8 +735,8 @@ void rootfs_unit_make(unsigned char *src_mem, size_t rootfs_size, uint32_t unixt
 
     // first try: static entries
     unit_header.blocksize	= BLOCKSIZE;
-    unit_header.flashpos1	= 0x00180000;
-    unit_header.flashpos2	= 0x00180000;
+    unit_header.flashpos1	= DEFAULT_ROOTFS_PTR;
+    unit_header.flashpos2	= DEFAULT_ROOTFS_PTR;
 
     unit_header.magic		= MAGIC_UNIT;
     unit_header.payload_size	= rootfs_size;
@@ -792,8 +796,8 @@ void branding_unit_make(unsigned char *src_mem, size_t branding_size, uint32_t u
 
     // first try: static entries
     unit_header.blocksize	= BLOCKSIZE;
-    unit_header.flashpos1	= 0x00f10000;
-    unit_header.flashpos2	= 0x00f10000;
+    unit_header.flashpos1	= DEFAULT_BRANDING_PTR;
+    unit_header.flashpos2	= DEFAULT_BRANDING_PTR;
 
     unit_header.magic		= MAGIC_UNIT;
 
