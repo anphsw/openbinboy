@@ -700,13 +700,13 @@ void kernel_unit_make(unsigned char *src_mem, size_t kernel_size, size_t rootfs_
     unit_header.blocksize	= BLOCKSIZE;
     unit_header.flashpos1	= 0x00010000;
     unit_header.flashpos2	= 0x00010000;
-    unit_header.partition_size	= 0x00170000;
 
     memcpy(&unit_header.devid, &firmware_params.devid, sizeof(unit_header.devid));
     unit_header.devid_bin	= (uint16_t)firmware_params.devid_bin;
 
     unit_header.magic		= MAGIC_UNIT;
     unit_header.payload_size	= sizeof(kernel_header_t) + kernel_size;
+    unit_header.partition_size	= (unit_header.payload_size % BLOCKSIZE) ? ((unit_header.payload_size / BLOCKSIZE) + 1) * BLOCKSIZE : unit_header.payload_size; // grow partition to fit whole block
     unit_header.type		= MAGIC_KERNEL;
 
     kernel_header_make(src_mem + sizeof(unit_header_t), kernel_size, rootfs_size, unixtime, firmware_params);
@@ -733,10 +733,10 @@ void rootfs_unit_make(unsigned char *src_mem, size_t rootfs_size, uint32_t unixt
     unit_header.blocksize	= BLOCKSIZE;
     unit_header.flashpos1	= 0x00180000;
     unit_header.flashpos2	= 0x00180000;
-    unit_header.partition_size	= 0x00d90000;
 
     unit_header.magic		= MAGIC_UNIT;
     unit_header.payload_size	= rootfs_size;
+    unit_header.partition_size	= (unit_header.payload_size % BLOCKSIZE) ? ((unit_header.payload_size / BLOCKSIZE) + 1) * BLOCKSIZE : unit_header.payload_size; // grow partition to fit whole block
     unit_header.type		= MAGIC_ROOTFS;
 
     memcpy(&unit_header.devid, &firmware_params.devid, sizeof(unit_header.devid));
@@ -794,11 +794,11 @@ void branding_unit_make(unsigned char *src_mem, size_t branding_size, uint32_t u
     unit_header.blocksize	= BLOCKSIZE;
     unit_header.flashpos1	= 0x00f10000;
     unit_header.flashpos2	= 0x00f10000;
-    unit_header.partition_size	= 0x000e0000;
 
     unit_header.magic		= MAGIC_UNIT;
 
     unit_header.payload_size	= branding_size;
+    unit_header.partition_size	= (unit_header.payload_size % BLOCKSIZE) ? ((unit_header.payload_size / BLOCKSIZE) + 1) * BLOCKSIZE : unit_header.payload_size; // grow partition to fit whole block
     unit_header.type		= MAGIC_BRANDING;
 
     memcpy(&unit_header.devid, &firmware_params.devid, sizeof(unit_header.devid));
