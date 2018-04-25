@@ -23,6 +23,8 @@ Now only static kernel/bootloader offsets supported (see in code)
   -n      Assemble whole firmware { -n [-c] [-e] [-t unixtime ] -k kernel.bin -r rootfs.bin [-u bootloader.bin] [-b branding.bin ] -o output.bin }
   -L      Kernel load address for firmware creation (default 0x80000000)
   -E      Kernel entry point for firmware creation (default 0x80000000)
+  -I      Device ID (text) for build firmware (default "LVA6E3804001")
+  -V      Device ID (binary) for build firmware (0x6e38)
 
 
 NOTES:
