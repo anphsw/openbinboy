@@ -32,6 +32,15 @@ typedef struct firmware_params {
 	uint32_t kern_entry;		// kernel entry point - 0x80000000
 	char devid[16];			// actual size is 12 (or 14 if padding0 is wrongly detected)
 	unsigned int devid_bin;
+
+        uint32_t bootloader_offset;
+        uint32_t bootloader_part_size;
+        uint32_t kernel_offset;
+        uint32_t kernel_part_size;
+        uint32_t rootfs_offset;
+        uint32_t rootfs_part_size;
+        uint32_t branding_offset;
+        uint32_t branding_part_size;
 } firmware_params_t;
 
 typedef struct unit_header {
@@ -713,6 +722,10 @@ void kernel_unit_make(unsigned char *src_mem, size_t kernel_size, size_t rootfs_
     unit_header.partition_size	= (unit_header.payload_size % BLOCKSIZE) ? ((unit_header.payload_size / BLOCKSIZE) + 1) * BLOCKSIZE : unit_header.payload_size; // grow partition to fit whole block
     unit_header.type		= MAGIC_KERNEL;
 
+    // store for dynamic sizing
+    firmware_params.kernel_offset	= unit_header.flashpos1;
+    firmware_params.kernel_part_size	= unit_header.partition_size;
+
     kernel_header_make(src_mem + sizeof(unit_header_t), kernel_size, rootfs_size, unixtime, firmware_params);
 
     // payload crc
@@ -743,6 +756,10 @@ void rootfs_unit_make(unsigned char *src_mem, size_t rootfs_size, uint32_t unixt
     unit_header.partition_size	= (unit_header.payload_size % BLOCKSIZE) ? ((unit_header.payload_size / BLOCKSIZE) + 1) * BLOCKSIZE : unit_header.payload_size; // grow partition to fit whole block
     unit_header.type		= MAGIC_ROOTFS;
 
+    // store for dynamic sizing
+    firmware_params.rootfs_offset	= unit_header.flashpos1;
+    firmware_params.rootfs_part_size	= unit_header.partition_size;
+
     memcpy(&unit_header.devid, &firmware_params.devid, sizeof(unit_header.devid));
     unit_header.devid_bin	= (uint16_t)firmware_params.devid_bin;
 
@@ -772,6 +789,10 @@ void bootloader_unit_make(unsigned char *src_mem, size_t bootloader_size, uint32
     unit_header.magic		= MAGIC_UNIT;
     unit_header.payload_size	= bootloader_size;
     unit_header.type		= MAGIC_BOOTLOADER;
+
+    // store for dynamic sizing
+    firmware_params.bootloader_offset	= unit_header.flashpos1;
+    firmware_params.bootloader_part_size= unit_header.partition_size;
 
     memcpy(&unit_header.devid, &firmware_params.devid, sizeof(unit_header.devid));
     unit_header.devid_bin	= (uint16_t)firmware_params.devid_bin;
@@ -804,6 +825,10 @@ void branding_unit_make(unsigned char *src_mem, size_t branding_size, uint32_t u
     unit_header.payload_size	= branding_size;
     unit_header.partition_size	= (unit_header.payload_size % BLOCKSIZE) ? ((unit_header.payload_size / BLOCKSIZE) + 1) * BLOCKSIZE : unit_header.payload_size; // grow partition to fit whole block
     unit_header.type		= MAGIC_BRANDING;
+
+    // store for dynamic sizing
+    firmware_params.branding_offset	= unit_header.flashpos1;
+    firmware_params.branding_part_size	= unit_header.partition_size;
 
     memcpy(&unit_header.devid, &firmware_params.devid, sizeof(unit_header.devid));
     unit_header.devid_bin	= (uint16_t)firmware_params.devid_bin;
